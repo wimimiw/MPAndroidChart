@@ -13,7 +13,6 @@ import android.widget.ListView;
 import com.github.mikephil.charting.data.BarData;
 import com.github.mikephil.charting.data.BarDataSet;
 import com.github.mikephil.charting.data.BarEntry;
-import com.github.mikephil.charting.data.ChartData;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.data.LineDataSet;
@@ -102,9 +101,10 @@ public class ListViewMultiChartActivity extends DemoBase {
         }
 
         LineDataSet d1 = new LineDataSet(e1, "New DataSet " + cnt + ", (1)");
-        d1.setLineWidth(3f);
-        d1.setCircleSize(5f);
+        d1.setLineWidth(2.5f);
+        d1.setCircleSize(4.5f);
         d1.setHighLightColor(Color.rgb(244, 117, 117));
+        d1.setDrawValues(false);
         
         ArrayList<Entry> e2 = new ArrayList<Entry>();
 
@@ -113,11 +113,12 @@ public class ListViewMultiChartActivity extends DemoBase {
         }
 
         LineDataSet d2 = new LineDataSet(e2, "New DataSet " + cnt + ", (2)");
-        d2.setLineWidth(3f);
-        d2.setCircleSize(5f);
+        d2.setLineWidth(2.5f);
+        d2.setCircleSize(4.5f);
         d2.setHighLightColor(Color.rgb(244, 117, 117));
         d2.setColor(ColorTemplate.VORDIPLOM_COLORS[0]);
         d2.setCircleColor(ColorTemplate.VORDIPLOM_COLORS[0]);
+        d2.setDrawValues(false);
         
         ArrayList<LineDataSet> sets = new ArrayList<LineDataSet>();
         sets.add(d1);
@@ -165,7 +166,7 @@ public class ListViewMultiChartActivity extends DemoBase {
         PieDataSet d = new PieDataSet(entries, "");
         
         // space between slices
-        d.setSliceSpace(5f);
+        d.setSliceSpace(2f);
         d.setColors(ColorTemplate.VORDIPLOM_COLORS);
         
         PieData cd = new PieData(getQuarters(), d);

@@ -1,14 +1,24 @@
 
 package com.github.mikephil.charting.utils;
 
+import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Paint;
+import android.graphics.PointF;
 import android.graphics.Rect;
+import android.os.Build;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.MotionEvent;
+import android.view.VelocityTracker;
+import android.view.View;
+import android.view.ViewConfiguration;
+
+import com.github.mikephil.charting.components.YAxis.AxisDependency;
 
 import java.text.DecimalFormat;
-import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Utilities class that has some helper methods. Needs to be initialized by
@@ -21,14 +31,50 @@ import java.util.ArrayList;
 public abstract class Utils {
 
     private static DisplayMetrics mMetrics;
+    private static int mMinimumFlingVelocity = 50;
+    private static int mMaximumFlingVelocity = 8000;
 
     /**
      * initialize method, called inside the Chart.init() method.
      * 
      * @param res
      */
+    @SuppressWarnings("deprecation")
+    public static void init(Context context) {
+
+        if (context == null) {
+            // noinspection deprecation
+            mMinimumFlingVelocity = ViewConfiguration.getMinimumFlingVelocity();
+            // noinspection deprecation
+            mMaximumFlingVelocity = ViewConfiguration.getMaximumFlingVelocity();
+
+            Log.e("MPAndroidChart, Utils.init(...)", "PROVIDED CONTEXT OBJECT IS NULL");
+
+        } else {
+            ViewConfiguration viewConfiguration = ViewConfiguration.get(context);
+            mMinimumFlingVelocity = viewConfiguration.getScaledMinimumFlingVelocity();
+            mMaximumFlingVelocity = viewConfiguration.getScaledMaximumFlingVelocity();
+
+            Resources res = context.getResources();
+            mMetrics = res.getDisplayMetrics();
+        }
+    }
+
+    /**
+     * initialize method, called inside the Chart.init() method. backwards
+     * compatibility - to not break existing code
+     *
+     * @param res
+     */
+    @Deprecated
     public static void init(Resources res) {
+
         mMetrics = res.getDisplayMetrics();
+
+        // noinspection deprecation
+        mMinimumFlingVelocity = ViewConfiguration.getMinimumFlingVelocity();
+        // noinspection deprecation
+        mMaximumFlingVelocity = ViewConfiguration.getMaximumFlingVelocity();
     }
 
     /**
@@ -116,7 +162,7 @@ public abstract class Utils {
     /**
      * calculates the approximate height of a text, depending on a demo text
      * avoid repeated calls (e.g. inside drawing methods)
-     * 
+     *
      * @param paint
      * @param demoText
      * @return
@@ -126,6 +172,31 @@ public abstract class Utils {
         Rect r = new Rect();
         paint.getTextBounds(demoText, 0, demoText.length(), r);
         return r.height();
+    }
+
+    public static float getLineHeight(Paint paint) {
+        Paint.FontMetrics metrics = paint.getFontMetrics();
+        return metrics.descent - metrics.ascent;
+    }
+
+    public static float getLineSpacing(Paint paint) {
+        Paint.FontMetrics metrics = paint.getFontMetrics();
+        return metrics.ascent - metrics.top + metrics.bottom;
+    }
+
+    /**
+     * calculates the approximate size of a text, depending on a demo text
+     * avoid repeated calls (e.g. inside drawing methods)
+     *
+     * @param paint
+     * @param demoText
+     * @return
+     */
+    public static FSize calcTextSize(Paint paint, String demoText) {
+
+        Rect r = new Rect();
+        paint.getTextBounds(demoText, 0, demoText.length(), r);
+        return new FSize(r.width(), r.height());
     }
 
     // /**
@@ -301,12 +372,12 @@ public abstract class Utils {
     }
 
     /**
-     * Converts the provided Integer ArrayList to an int array.
+     * Converts the provided Integer List to an int array.
      * 
      * @param integers
      * @return
      */
-    public static int[] convertIntegers(ArrayList<Integer> integers) {
+    public static int[] convertIntegers(List<Integer> integers) {
 
         int[] ret = new int[integers.size()];
 
@@ -318,12 +389,12 @@ public abstract class Utils {
     }
 
     /**
-     * Converts the provided String ArrayList to a String array.
+     * Converts the provided String List to a String array.
      * 
      * @param labels
      * @return
      */
-    public static String[] convertStrings(ArrayList<String> strings) {
+    public static String[] convertStrings(List<String> strings) {
 
         String[] ret = new String[strings.size()];
 
@@ -336,7 +407,7 @@ public abstract class Utils {
 
     /**
      * Replacement for the Math.nextUp(...) method that is only available in
-     * HONEYCOMB and higher.
+     * HONEYCOMB and higher. Dat's some seeeeek sheeet.
      * 
      * @param d
      * @return
@@ -358,22 +429,130 @@ public abstract class Utils {
      * @param valsAtIndex all the values at a specific index
      * @return
      */
-    public static int getClosestDataSetIndex(ArrayList<SelInfo> valsAtIndex, float val) {
+    public static int getClosestDataSetIndex(List<SelectionDetail> valsAtIndex, float val,
+            AxisDependency axis) {
 
         int index = -1;
         float distance = Float.MAX_VALUE;
 
         for (int i = 0; i < valsAtIndex.size(); i++) {
 
-            float cdistance = Math.abs((float) valsAtIndex.get(i).val - val);
-            if (cdistance < distance) {
-                index = valsAtIndex.get(i).dataSetIndex;
-                distance = cdistance;
+            SelectionDetail sel = valsAtIndex.get(i);
+
+            if (axis == null || sel.dataSet.getAxisDependency() == axis) {
+
+                float cdistance = Math.abs((float) sel.val - val);
+                if (cdistance < distance) {
+                    index = valsAtIndex.get(i).dataSetIndex;
+                    distance = cdistance;
+                }
             }
         }
 
         // Log.i(LOG_TAG, "Closest DataSet index: " + index);
 
         return index;
+    }
+
+    /**
+     * Returns the minimum distance from a touch-y-value (in pixels) to the
+     * closest y-value (in pixels) that is displayed in the chart.
+     * 
+     * @param valsAtIndex
+     * @param val
+     * @param axis
+     * @return
+     */
+    public static float getMinimumDistance(List<SelectionDetail> valsAtIndex, float val,
+            AxisDependency axis) {
+
+        float distance = Float.MAX_VALUE;
+
+        for (int i = 0; i < valsAtIndex.size(); i++) {
+
+            SelectionDetail sel = valsAtIndex.get(i);
+
+            if (sel.dataSet.getAxisDependency() == axis) {
+
+                float cdistance = Math.abs((float) sel.val - val);
+                if (cdistance < distance) {
+                    distance = cdistance;
+                }
+            }
+        }
+
+        return distance;
+    }
+
+    /**
+     * Calculates the position around a center point, depending on the distance
+     * from the center, and the angle of the position around the center.
+     * 
+     * @param center
+     * @param dist
+     * @param angle in degrees, converted to radians internally
+     * @return
+     */
+    public static PointF getPosition(PointF center, float dist, float angle) {
+
+        PointF p = new PointF((float) (center.x + dist * Math.cos(Math.toRadians(angle))),
+                (float) (center.y + dist * Math.sin(Math.toRadians(angle))));
+        return p;
+    }
+
+    public static void velocityTrackerPointerUpCleanUpIfNecessary(MotionEvent ev,
+            VelocityTracker tracker) {
+
+        // Check the dot product of current velocities.
+        // If the pointer that left was opposing another velocity vector, clear.
+        tracker.computeCurrentVelocity(1000, mMaximumFlingVelocity);
+        final int upIndex = ev.getActionIndex();
+        final int id1 = ev.getPointerId(upIndex);
+        final float x1 = tracker.getXVelocity(id1);
+        final float y1 = tracker.getYVelocity(id1);
+        for (int i = 0, count = ev.getPointerCount(); i < count; i++) {
+            if (i == upIndex)
+                continue;
+
+            final int id2 = ev.getPointerId(i);
+            final float x = x1 * tracker.getXVelocity(id2);
+            final float y = y1 * tracker.getYVelocity(id2);
+
+            final float dot = x + y;
+            if (dot < 0) {
+                tracker.clear();
+                break;
+            }
+        }
+    }
+
+    /**
+     * Original method view.postInvalidateOnAnimation() only supportd in API >=
+     * 16, This is a replica of the code from ViewCompat.
+     *
+     * @param view
+     */
+    @SuppressLint("NewApi")
+    public static void postInvalidateOnAnimation(View view) {
+        if (Build.VERSION.SDK_INT >= 16)
+            view.postInvalidateOnAnimation();
+        else
+            view.postInvalidateDelayed(10);
+    }
+
+    public static int getMinimumFlingVelocity() {
+        return mMinimumFlingVelocity;
+    }
+
+    public static int getMaximumFlingVelocity() {
+        return mMaximumFlingVelocity;
+    }
+
+    /** returns an angle between 0.f < 360.f (not less than zero, less than 360) */
+    public static float getNormalizedAngle(float angle) {
+        while (angle < 0.f)
+            angle += 360.f;
+
+        return angle % 360.f;
     }
 }

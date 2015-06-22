@@ -14,10 +14,6 @@
         android:title="Toggle Highlight Arrow">
     </item>
     <item
-        android:id="@+id/actionToggle3D"
-        android:title="Toggle 3D">
-    </item>
-    <item
         android:id="@+id/animateX"
         android:title="Animate X">
     </item>
@@ -48,6 +44,10 @@
     <item
         android:id="@+id/actionTogglePinch"
         android:title="Toggle PinchZoom">
+    </item>
+    <item
+        android:id="@+id/actionToggleAutoScaleMinMax"
+        android:title="Toggle auto scale min/max">
     </item>
 
 </menu>

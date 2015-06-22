@@ -8,15 +8,20 @@ import android.util.Log;
 import android.view.GestureDetector;
 import android.view.GestureDetector.SimpleOnGestureListener;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
 import android.view.View.OnTouchListener;
+import android.view.animation.AnimationUtils;
 
 import com.github.mikephil.charting.charts.BarLineChartBase;
+import com.github.mikephil.charting.charts.HorizontalBarChart;
 import com.github.mikephil.charting.data.BarLineScatterCandleData;
-import com.github.mikephil.charting.data.BarLineScatterCandleRadarDataSet;
+import com.github.mikephil.charting.data.BarLineScatterCandleDataSet;
+import com.github.mikephil.charting.data.DataSet;
 import com.github.mikephil.charting.data.Entry;
-import com.github.mikephil.charting.interfaces.OnChartGestureListener;
 import com.github.mikephil.charting.utils.Highlight;
+import com.github.mikephil.charting.utils.Utils;
+import com.github.mikephil.charting.utils.ViewPortHandler;
 
 /**
  * TouchListener for Bar-, Line-, Scatter- and CandleStickChart with handles all
@@ -24,8 +29,7 @@ import com.github.mikephil.charting.utils.Highlight;
  * 
  * @author Philipp Jahoda
  */
-public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarLineScatterCandleData<? extends BarLineScatterCandleRadarDataSet<? extends Entry>>>>
-        extends SimpleOnGestureListener implements OnTouchListener {
+public class BarLineChartTouchListener extends ChartTouchListener<BarLineChartBase<? extends BarLineScatterCandleData<? extends BarLineScatterCandleDataSet<? extends Entry>>>> {
 
     /** the original touch-matrix from the chart */
     private Matrix mMatrix = new Matrix();
@@ -39,47 +43,45 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
     /** center between two pointers (fingers on the display) */
     private PointF mTouchPointCenter = new PointF();
 
-    // states
-    private static final int NONE = 0;
-    private static final int DRAG = 1;
-
-    private static final int X_ZOOM = 2;
-    private static final int Y_ZOOM = 3;
-    private static final int PINCH_ZOOM = 4;
-    private static final int POST_ZOOM = 5;
-
-    /** integer field that holds the current touch-state */
-    private int mTouchMode = NONE;
-
     private float mSavedXDist = 1f;
     private float mSavedYDist = 1f;
     private float mSavedDist = 1f;
 
-    /** the last highlighted object */
-    private Highlight mLastHighlighted;
+    private DataSet<?> mClosestDataSetToTouch;
 
-    /** the chart the listener represents */
-    private T mChart;
+    /** used for tracking velocity of dragging */
+    private VelocityTracker mVelocityTracker;
 
-    /** the gesturedetector used for detecting taps and longpresses, ... */
-    private GestureDetector mGestureDetector;
+    private long mDecelerationLastTime = 0;
+    private PointF mDecelerationCurrentPoint = new PointF();
+    private PointF mDecelerationVelocity = new PointF();
 
-    public BarLineChartTouchListener(T chart, Matrix start) {
-        this.mChart = chart;
-        this.mMatrix = start;
-
-        mGestureDetector = new GestureDetector(chart.getContext(), this);
+    public BarLineChartTouchListener(BarLineChartBase<? extends BarLineScatterCandleData<? extends BarLineScatterCandleDataSet<? extends Entry>>> chart, Matrix touchMatrix) {
+        super(chart);
+        this.mMatrix = touchMatrix;
     }
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouch(View v, MotionEvent event) {
 
+        if (mVelocityTracker == null) {
+            mVelocityTracker = VelocityTracker.obtain();
+        }
+        mVelocityTracker.addMovement(event);
+
+        if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+            if (mVelocityTracker != null) {
+                mVelocityTracker.recycle();
+                mVelocityTracker = null;
+            }
+        }
+
         if (mTouchMode == NONE) {
             mGestureDetector.onTouchEvent(event);
         }
 
-        if (!mChart.isDragEnabled() && !mChart.isScaleEnabled())
+        if (!mChart.isDragEnabled() && (!mChart.isScaleXEnabled() && !mChart.isScaleYEnabled()))
             return true;
 
         // Handle touch events here...
@@ -87,7 +89,10 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
 
             case MotionEvent.ACTION_DOWN:
 
+                stopDeceleration();
+
                 saveTouchStart(event);
+
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
 
@@ -127,43 +132,82 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
                 if (mTouchMode == DRAG) {
 
                     mChart.disableScroll();
-
-                    if (mChart.isDragEnabled())
-                        performDrag(event);
+                    performDrag(event);
 
                 } else if (mTouchMode == X_ZOOM || mTouchMode == Y_ZOOM || mTouchMode == PINCH_ZOOM) {
 
                     mChart.disableScroll();
 
-                    if (mChart.isScaleEnabled())
+                    if (mChart.isScaleXEnabled() || mChart.isScaleYEnabled())
                         performZoom(event);
 
                 } else if (mTouchMode == NONE
                         && Math.abs(distance(event.getX(), mTouchStartPoint.x, event.getY(),
-                                mTouchStartPoint.y)) > 25f) {
+                                mTouchStartPoint.y)) > 5f) {
 
                     if (mChart.hasNoDragOffset()) {
 
-                        if (!mChart.isFullyZoomedOut())
+                        if (!mChart.isFullyZoomedOut() && mChart.isDragEnabled())
                             mTouchMode = DRAG;
+                        else {
+                            if (mChart.isHighlightPerDragEnabled())
+                                performHighlightDrag(event);
+                        }
 
-                    } else {
+                    } else if (mChart.isDragEnabled()) {
                         mTouchMode = DRAG;
                     }
                 }
                 break;
 
             case MotionEvent.ACTION_UP:
+
+                final VelocityTracker velocityTracker = mVelocityTracker;
+                final int pointerId = event.getPointerId(0);
+                velocityTracker.computeCurrentVelocity(1000, Utils.getMaximumFlingVelocity());
+                final float velocityY = velocityTracker.getYVelocity(pointerId);
+                final float velocityX = velocityTracker.getXVelocity(pointerId);
+
+                if (Math.abs(velocityX) > Utils.getMinimumFlingVelocity() ||
+                        Math.abs(velocityY) > Utils.getMinimumFlingVelocity()) {
+
+                    if (mTouchMode == DRAG && mChart.isDragDecelerationEnabled()) {
+
+                        stopDeceleration();
+
+                        mDecelerationLastTime = AnimationUtils.currentAnimationTimeMillis();
+                        mDecelerationCurrentPoint = new PointF(event.getX(), event.getY());
+                        mDecelerationVelocity = new PointF(velocityX, velocityY);
+
+                        Utils.postInvalidateOnAnimation(mChart); // This causes computeScroll to fire, recommended for this by Google
+                    }
+                }
+
                 mTouchMode = NONE;
                 mChart.enableScroll();
+
+                if (mVelocityTracker != null) {
+                    mVelocityTracker.recycle();
+                    mVelocityTracker = null;
+                }
+
                 break;
             case MotionEvent.ACTION_POINTER_UP:
+                Utils.velocityTrackerPointerUpCleanUpIfNecessary(event, mVelocityTracker);
+
                 mTouchMode = POST_ZOOM;
+                break;
+
+            case MotionEvent.ACTION_CANCEL:
+
+                mTouchMode = NONE;
+
                 break;
         }
 
         // Perform the transformation, update the chart
-        mMatrix = mChart.getTransformer().refresh(mMatrix, mChart);
+        // if (needsRefresh())
+        mMatrix = mChart.getViewPortHandler().refresh(mMatrix, mChart, true);
 
         return true; // indicate event was handled
     }
@@ -182,6 +226,8 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
 
         mSavedMatrix.set(mMatrix);
         mTouchStartPoint.set(event.getX(), event.getY());
+
+        mClosestDataSetToTouch = mChart.getDataSetByTouchPoint(event.getX(), event.getY());
     }
 
     /**
@@ -192,16 +238,33 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
     private void performDrag(MotionEvent event) {
 
         mMatrix.set(mSavedMatrix);
-        PointF dragPoint = new PointF(event.getX(), event.getY());
+
+        OnChartGestureListener l = mChart.getOnChartGestureListener();
+
+        float dX, dY;
 
         // check if axis is inverted
-        if (!mChart.isInvertYAxisEnabled()) {
-            mMatrix.postTranslate(dragPoint.x - mTouchStartPoint.x, dragPoint.y
-                    - mTouchStartPoint.y);
-        } else {
-            mMatrix.postTranslate(dragPoint.x - mTouchStartPoint.x, -(dragPoint.y
-                    - mTouchStartPoint.y));
+        if (mChart.isAnyAxisInverted() && mClosestDataSetToTouch != null
+                && mChart.getAxis(mClosestDataSetToTouch.getAxisDependency()).isInverted()) {
+
+            // if there is an inverted horizontalbarchart
+            if (mChart instanceof HorizontalBarChart) {
+                dX = -(event.getX() - mTouchStartPoint.x);
+                dY = event.getY() - mTouchStartPoint.y;
+            } else {
+                dX = event.getX() - mTouchStartPoint.x;
+                dY = -(event.getY() - mTouchStartPoint.y);
+            }
         }
+        else {
+            dX = event.getX() - mTouchStartPoint.x;
+            dY = event.getY() - mTouchStartPoint.y;
+        }
+
+        mMatrix.postTranslate(dX, dY);
+
+        if (l != null)
+            l.onChartTranslate(event, dX, dY);
     }
 
     /**
@@ -212,6 +275,8 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
     private void performZoom(MotionEvent event) {
 
         if (event.getPointerCount() >= 2) {
+
+            OnChartGestureListener l = mChart.getOnChartGestureListener();
 
             // get the distance between the pointers of the touch
             // event
@@ -226,34 +291,91 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
                 // mode
                 if (mTouchMode == PINCH_ZOOM) {
 
-                    float scale = totalDist / mSavedDist; // total
-                                                          // scale
+                    float scale = totalDist / mSavedDist; // total scale
 
-                    mMatrix.set(mSavedMatrix);
-                    mMatrix.postScale(scale, scale, t.x, t.y);
+                    boolean isZoomingOut = (scale < 1);
+                    boolean canZoomMoreX = isZoomingOut ?
+                            mChart.getViewPortHandler().canZoomOutMoreX() :
+                            mChart.getViewPortHandler().canZoomInMoreX();
 
-                } else if (mTouchMode == X_ZOOM) {
+                    float scaleX = (mChart.isScaleXEnabled()) ? scale : 1f;
+                    float scaleY = (mChart.isScaleYEnabled()) ? scale : 1f;
+
+                    if (mChart.isScaleYEnabled() || canZoomMoreX) {
+
+                        mMatrix.set(mSavedMatrix);
+                        mMatrix.postScale(scaleX, scaleY, t.x, t.y);
+
+                        if (l != null)
+                            l.onChartScale(event, scaleX, scaleY);
+                    }
+
+                } else if (mTouchMode == X_ZOOM && mChart.isScaleXEnabled()) {
 
                     float xDist = getXDist(event);
-                    float scaleX = xDist / mSavedXDist; // x-axis
-                                                        // scale
+                    float scaleX = xDist / mSavedXDist; // x-axis scale
 
-                    mMatrix.set(mSavedMatrix);
-                    mMatrix.postScale(scaleX, 1f, t.x, t.y);
+                    boolean isZoomingOut = (scaleX < 1);
+                    boolean canZoomMoreX = isZoomingOut ?
+                            mChart.getViewPortHandler().canZoomOutMoreX() :
+                            mChart.getViewPortHandler().canZoomInMoreX();
 
-                } else if (mTouchMode == Y_ZOOM) {
+                    if (canZoomMoreX) {
+
+                        mMatrix.set(mSavedMatrix);
+                        mMatrix.postScale(scaleX, 1f, t.x, t.y);
+
+                        if (l != null)
+                            l.onChartScale(event, scaleX, 1f);
+                    }
+
+                } else if (mTouchMode == Y_ZOOM && mChart.isScaleYEnabled()) {
 
                     float yDist = getYDist(event);
-                    float scaleY = yDist / mSavedYDist; // y-axis
-                                                        // scale
+                    float scaleY = yDist / mSavedYDist; // y-axis scale
 
                     mMatrix.set(mSavedMatrix);
 
                     // y-axis comes from top to bottom, revert y
                     mMatrix.postScale(1f, scaleY, t.x, t.y);
 
+                    if (l != null)
+                        l.onChartScale(event, 1f, scaleY);
                 }
             }
+        }
+    }
+
+    /**
+     * Perform a highlight operation.
+     * 
+     * @param e
+     */
+    private void performHighlight(MotionEvent e) {
+
+        Highlight h = mChart.getHighlightByTouchPoint(e.getX(), e.getY());
+
+        if (h == null || h.equalTo(mLastHighlighted)) {
+            mChart.highlightTouch(null);
+            mLastHighlighted = null;
+        } else {
+            mLastHighlighted = h;
+            mChart.highlightTouch(h);
+        }
+    }
+
+    /**
+     * Highlights upon dragging, generates callbacks for the selection-listener.
+     * 
+     * @param e
+     */
+    private void performHighlightDrag(MotionEvent e) {
+
+        Highlight h = mChart.getHighlightByTouchPoint(e.getX(), e.getY());
+
+        if (h != null && !h.equalTo(mLastHighlighted)) {
+            mLastHighlighted = h;
+            mChart.highlightTouch(h);
         }
     }
 
@@ -262,20 +384,6 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
      */
     /** DOING THE MATH BELOW ;-) */
 
-    /**
-     * returns the distance between two points
-     * 
-     * @param eventX
-     * @param startX
-     * @param eventY
-     * @param startY
-     * @return
-     */
-    private static float distance(float eventX, float startX, float eventY, float startY) {
-        float dx = eventX - startX;
-        float dy = eventY - startY;
-        return (float) Math.sqrt(dx * dx + dy * dy);
-    }
 
     /**
      * Determines the center point between two pointer touch points.
@@ -329,19 +437,23 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
      * returns the correct translation depending on the provided x and y touch
      * points
      * 
-     * @param e
+     * @param x
+     * @param y
      * @return
      */
     public PointF getTrans(float x, float y) {
 
-        float xTrans = x - mChart.getOffsetLeft();
+        ViewPortHandler vph = mChart.getViewPortHandler();
+
+        float xTrans = x - vph.offsetLeft();
         float yTrans = 0f;
 
         // check if axis is inverted
-        if (!mChart.isInvertYAxisEnabled()) {
-            yTrans = -(mChart.getMeasuredHeight() - y - mChart.getOffsetBottom());
+        if (mChart.isAnyAxisInverted() && mClosestDataSetToTouch != null
+                && mChart.isInverted(mClosestDataSetToTouch.getAxisDependency())) {
+            yTrans = -(y - vph.offsetTop());
         } else {
-            yTrans = -(y - mChart.getOffsetTop());
+            yTrans = -(mChart.getMeasuredHeight() - y - vph.offsetBottom());
         }
 
         return new PointF(xTrans, yTrans);
@@ -361,15 +473,6 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
         return mMatrix;
     }
 
-    /**
-     * returns the touch mode the listener is currently in
-     * 
-     * @return
-     */
-    public int getTouchMode() {
-        return mTouchMode;
-    }
-
     @Override
     public boolean onDoubleTap(MotionEvent e) {
 
@@ -385,9 +488,11 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
 
             PointF trans = getTrans(e.getX(), e.getY());
 
-            mChart.zoom(1.4f, 1.4f, trans.x, trans.y);
+            mChart.zoom(mChart.isScaleXEnabled() ? 1.4f : 1f, mChart.isScaleYEnabled() ? 1.4f : 1f, trans.x, trans.y);
 
-            Log.i("BarlineChartTouch", "Double-Tap, Zooming In, x: " + trans.x + ", y: " + trans.y);
+            if (mChart.isLogEnabled())
+                Log.i("BarlineChartTouch", "Double-Tap, Zooming In, x: " + trans.x + ", y: "
+                        + trans.y);
         }
 
         return super.onDoubleTap(e);
@@ -401,48 +506,26 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
         if (l != null) {
 
             l.onChartLongPressed(e);
-        } else if (mTouchMode == NONE) {
-
-            mChart.fitScreen();
-
-            Log.i("BarlineChartTouch",
-                    "Longpress, resetting zoom and drag, adjusting chart bounds to screen.");
-
-            // PointF trans = getTrans(e.getX(), e.getY());
-            //
-            // mChart.zoomOut(trans.x, trans.y);
-            //
-            // Log.i("BarlineChartTouch", "Longpress, Zooming Out, x: " +
-            // trans.x +
-            // ", y: " + trans.y);
         }
     }
 
     @Override
     public boolean onSingleTapUp(MotionEvent e) {
 
-        OnChartGestureListener l = mChart.getOnChartGestureListener();
-
-        if (l != null) {
-
-            l.onChartSingleTapped(e);
-        }
-
-        Highlight h = mChart.getHighlightByTouchPoint(e.getX(), e.getY());
-
-        if (h == null || h.equalTo(mLastHighlighted)) {
-            mChart.highlightTouch(null);
-            mLastHighlighted = null;
-        } else {
-            mLastHighlighted = h;
-            mChart.highlightTouch(h);
-        }
+        performHighlight(e);
 
         return super.onSingleTapUp(e);
     }
 
     @Override
     public boolean onSingleTapConfirmed(MotionEvent e) {
+
+        OnChartGestureListener l = mChart.getOnChartGestureListener();
+
+        if (l != null) {
+            l.onChartSingleTapped(e);
+        }
+
         return super.onSingleTapConfirmed(e);
     }
 
@@ -455,5 +538,40 @@ public class BarLineChartTouchListener<T extends BarLineChartBase<? extends BarL
             l.onChartFling(e1, e2, velocityX, velocityY);
 
         return super.onFling(e1, e2, velocityX, velocityY);
+    }
+
+    public void stopDeceleration() {
+        mDecelerationVelocity = new PointF(0.f, 0.f);
+    }
+
+    public void computeScroll() {
+
+        if (mDecelerationVelocity.x == 0.f && mDecelerationVelocity.y == 0.f)
+            return; // There's no deceleration in progress
+
+        final long currentTime = AnimationUtils.currentAnimationTimeMillis();
+
+        mDecelerationVelocity.x *= mChart.getDragDecelerationFrictionCoef();
+        mDecelerationVelocity.y *= mChart.getDragDecelerationFrictionCoef();
+
+        final float timeInterval = (float)(currentTime - mDecelerationLastTime) / 1000.f;
+
+        float distanceX = mDecelerationVelocity.x * timeInterval;
+        float distanceY = mDecelerationVelocity.y * timeInterval;
+
+        mDecelerationCurrentPoint.x += distanceX;
+        mDecelerationCurrentPoint.y += distanceY;
+
+        MotionEvent event = MotionEvent.obtain(currentTime, currentTime, MotionEvent.ACTION_MOVE, mDecelerationCurrentPoint.x, mDecelerationCurrentPoint.y, 0);
+        performDrag(event);
+        event.recycle();
+        mMatrix = mChart.getViewPortHandler().refresh(mMatrix, mChart, false);
+
+        mDecelerationLastTime = currentTime;
+
+        if (Math.abs(mDecelerationVelocity.x) >= 0.01 || Math.abs(mDecelerationVelocity.y) >= 0.01)
+            Utils.postInvalidateOnAnimation(mChart); // This causes computeScroll to fire, recommended for this by Google
+        else
+            stopDeceleration();
     }
 }

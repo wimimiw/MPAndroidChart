@@ -7,8 +7,9 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.github.mikephil.charting.charts.LineChart;
-import com.github.mikephil.charting.utils.Legend;
-import com.github.mikephil.charting.utils.YLabels;
+import com.github.mikephil.charting.components.Legend;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.components.YAxis;
 import com.xxmassdeveloper.mpchartexample.R;
 
 
@@ -27,15 +28,9 @@ public class ComplexityFragment extends SimpleFragment {
         mChart = (LineChart) v.findViewById(R.id.lineChart1);
         
         mChart.setDescription("");
-        mChart.setDrawYValues(false);
         
-        mChart.setHighlightIndicatorEnabled(false); 
-        mChart.setDrawBorder(false);
+        mChart.setHighlightEnabled(false);
         mChart.setDrawGridBackground(false);
-        mChart.setDrawVerticalGrid(false);
-        mChart.setDrawXLabels(false);
-        mChart.setDrawYValues(false);
-        mChart.setStartAtZero(false);
         
         mChart.setData(getComplexity());
         mChart.animateX(3000);
@@ -48,8 +43,13 @@ public class ComplexityFragment extends SimpleFragment {
         Legend l = mChart.getLegend();
         l.setTypeface(tf);
         
-        YLabels labels = mChart.getYLabels();
-        labels.setTypeface(tf);
+        YAxis leftAxis = mChart.getAxisLeft();
+        leftAxis.setTypeface(tf);
+        
+        mChart.getAxisRight().setEnabled(false);
+        
+        XAxis xAxis = mChart.getXAxis();
+        xAxis.setEnabled(false);
         
         return v;
     }

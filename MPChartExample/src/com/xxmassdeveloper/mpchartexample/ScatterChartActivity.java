@@ -13,17 +13,19 @@ import android.widget.TextView;
 
 import com.github.mikephil.charting.charts.ScatterChart;
 import com.github.mikephil.charting.charts.ScatterChart.ScatterShape;
+import com.github.mikephil.charting.components.Legend;
+import com.github.mikephil.charting.components.Legend.LegendPosition;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.components.YAxis;
+import com.github.mikephil.charting.data.DataSet;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.ScatterData;
 import com.github.mikephil.charting.data.ScatterDataSet;
 import com.github.mikephil.charting.data.filter.Approximator;
 import com.github.mikephil.charting.data.filter.Approximator.ApproximatorType;
-import com.github.mikephil.charting.interfaces.OnChartValueSelectedListener;
+import com.github.mikephil.charting.listener.OnChartValueSelectedListener;
 import com.github.mikephil.charting.utils.ColorTemplate;
-import com.github.mikephil.charting.utils.Legend;
-import com.github.mikephil.charting.utils.Legend.LegendPosition;
-import com.github.mikephil.charting.utils.XLabels;
-import com.github.mikephil.charting.utils.YLabels;
+import com.github.mikephil.charting.utils.Highlight;
 import com.xxmassdeveloper.mpchartexample.notimportant.DemoBase;
 
 import java.util.ArrayList;
@@ -35,6 +37,8 @@ public class ScatterChartActivity extends DemoBase implements OnSeekBarChangeLis
     private SeekBar mSeekBarX, mSeekBarY;
     private TextView tvX, tvY;
 
+    private Typeface tf;
+    
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -54,8 +58,7 @@ public class ScatterChartActivity extends DemoBase implements OnSeekBarChangeLis
         mChart = (ScatterChart) findViewById(R.id.chart1);
         mChart.setDescription("");
 
-        Typeface tf = Typeface.createFromAsset(getAssets(), "OpenSans-Regular.ttf");
-        mChart.setValueTypeface(tf);
+        tf = Typeface.createFromAsset(getAssets(), "OpenSans-Regular.ttf");
 
         mChart.setOnChartValueSelectedListener(this);
 
@@ -63,7 +66,6 @@ public class ScatterChartActivity extends DemoBase implements OnSeekBarChangeLis
 
         mChart.setTouchEnabled(true);
         mChart.setHighlightEnabled(true);
-        mChart.setDrawYValues(false);
 
         // enable scaling and dragging
         mChart.setDragEnabled(true);
@@ -79,11 +81,14 @@ public class ScatterChartActivity extends DemoBase implements OnSeekBarChangeLis
         l.setPosition(LegendPosition.RIGHT_OF_CHART);
         l.setTypeface(tf);
 
-        YLabels yl = mChart.getYLabels();
+        YAxis yl = mChart.getAxisLeft();
         yl.setTypeface(tf);
+        
+        mChart.getAxisRight().setEnabled(false);
 
-        XLabels xl = mChart.getXLabels();
+        XAxis xl = mChart.getXAxis();
         xl.setTypeface(tf);
+        xl.setDrawGridLines(false);
     }
 
     @Override
@@ -97,10 +102,9 @@ public class ScatterChartActivity extends DemoBase implements OnSeekBarChangeLis
 
         switch (item.getItemId()) {
             case R.id.actionToggleValues: {
-                if (mChart.isDrawYValuesEnabled())
-                    mChart.setDrawYValues(false);
-                else
-                    mChart.setDrawYValues(true);
+                for (DataSet<?> set : mChart.getData().getDataSets())
+                    set.setDrawValues(!set.isDrawValuesEnabled());
+
                 mChart.invalidate();
                 break;
             }
@@ -121,23 +125,14 @@ public class ScatterChartActivity extends DemoBase implements OnSeekBarChangeLis
                 mChart.invalidate();
                 break;
             }
-            case R.id.actionToggleStartzero: {
-                if (mChart.isStartAtZeroEnabled())
-                    mChart.setStartAtZero(false);
-                else
-                    mChart.setStartAtZero(true);
-
-                mChart.invalidate();
+            case R.id.actionToggleAutoScaleMinMax: {
+                mChart.setAutoScaleMinMaxEnabled(!mChart.isAutoScaleMinMaxEnabled());
+                mChart.notifyDataSetChanged();
                 break;
             }
-            case R.id.actionToggleAdjustXLegend: {
-                XLabels xLabels = mChart.getXLabels();
-
-                if (xLabels.isAdjustXLabelsEnabled())
-                    xLabels.setAdjustXLabels(false);
-                else
-                    xLabels.setAdjustXLabels(true);
-
+            case R.id.actionToggleStartzero: {
+                mChart.getAxisLeft().setStartAtZero(!mChart.getAxisLeft().isStartAtZeroEnabled());
+                mChart.getAxisRight().setStartAtZero(!mChart.getAxisRight().isStartAtZeroEnabled());
                 mChart.invalidate();
                 break;
             }
@@ -182,7 +177,7 @@ public class ScatterChartActivity extends DemoBase implements OnSeekBarChangeLis
         tvY.setText("" + (mSeekBarY.getProgress()));
 
         ArrayList<String> xVals = new ArrayList<String>();
-        for (int i = 0; i < mSeekBarX.getProgress(); i++) {
+        for (int i = 0; i < mSeekBarX.getProgress() + 1; i++) {
             xVals.add((i) + "");
         }
 
@@ -213,7 +208,7 @@ public class ScatterChartActivity extends DemoBase implements OnSeekBarChangeLis
         set2.setScatterShape(ScatterShape.CIRCLE);
         set2.setColor(ColorTemplate.COLORFUL_COLORS[1]);
         ScatterDataSet set3 = new ScatterDataSet(yVals3, "DS 3");
-        set3.setScatterShape(ScatterShape.TRIANGLE);
+        set3.setScatterShape(ScatterShape.CROSS);
         set3.setColor(ColorTemplate.COLORFUL_COLORS[2]);
 
         set1.setScatterShapeSize(8f);
@@ -227,13 +222,14 @@ public class ScatterChartActivity extends DemoBase implements OnSeekBarChangeLis
 
         // create a data object with the datasets
         ScatterData data = new ScatterData(xVals, dataSets);
+        data.setValueTypeface(tf);
 
         mChart.setData(data);
         mChart.invalidate();
     }
 
     @Override
-    public void onValueSelected(Entry e, int dataSetIndex) {
+    public void onValueSelected(Entry e, int dataSetIndex, Highlight h) {
         Log.i("VAL SELECTED",
                 "Value: " + e.getVal() + ", xIndex: " + e.getXIndex()
                         + ", DataSet index: " + dataSetIndex);

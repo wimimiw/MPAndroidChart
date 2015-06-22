@@ -1,17 +1,21 @@
 
 package com.github.mikephil.charting.data;
 
-import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Baseclass for all Line, Bar and ScatterData.
  * 
  * @author Philipp Jahoda
  */
-public abstract class BarLineScatterCandleData<T extends BarLineScatterCandleRadarDataSet<? extends Entry>>
-        extends BarLineScatterCandleRadarData<T> {
+public abstract class BarLineScatterCandleData<T extends BarLineScatterCandleDataSet<? extends Entry>>
+        extends ChartData<T> {
     
-    public BarLineScatterCandleData(ArrayList<String> xVals) {
+    public BarLineScatterCandleData() {
+        super();
+    }
+    
+    public BarLineScatterCandleData(List<String> xVals) {
         super(xVals);
     }
     
@@ -19,11 +23,11 @@ public abstract class BarLineScatterCandleData<T extends BarLineScatterCandleRad
         super(xVals);
     }
 
-    public BarLineScatterCandleData(ArrayList<String> xVals, ArrayList<T> sets) {
+    public BarLineScatterCandleData(List<String> xVals, List<T> sets) {
         super(xVals, sets);
     }
 
-    public BarLineScatterCandleData(String[] xVals, ArrayList<T> sets) {
+    public BarLineScatterCandleData(String[] xVals, List<T> sets) {
         super(xVals, sets);
     }
 }

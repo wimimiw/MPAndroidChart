@@ -7,11 +7,12 @@ import com.github.mikephil.charting.charts.ScatterChart.ScatterShape;
 import com.github.mikephil.charting.utils.Utils;
 
 import java.util.ArrayList;
+import java.util.List;
 
-public class ScatterDataSet extends BarLineScatterCandleRadarDataSet<Entry> {
+public class ScatterDataSet extends BarLineScatterCandleDataSet<Entry> {
 
     /** the size the scattershape will have, in screen pixels */
-    private float mShapeSize = 12f;
+    private float mShapeSize = 15f;
 
     /**
      * the type of shape that is set to be drawn where the values are at,
@@ -25,7 +26,7 @@ public class ScatterDataSet extends BarLineScatterCandleRadarDataSet<Entry> {
      */
     private Path mCustomScatterPath = null;
 
-    public ScatterDataSet(ArrayList<Entry> yVals, String label) {
+    public ScatterDataSet(List<Entry> yVals, String label) {
         super(yVals, label);
 
         // mShapeSize = Utils.convertDpToPixel(8f);
@@ -34,7 +35,7 @@ public class ScatterDataSet extends BarLineScatterCandleRadarDataSet<Entry> {
     @Override
     public DataSet<Entry> copy() {
 
-        ArrayList<Entry> yVals = new ArrayList<Entry>();
+        List<Entry> yVals = new ArrayList<Entry>();
 
         for (int i = 0; i < mYVals.size(); i++) {
             yVals.add(mYVals.get(i).copy());

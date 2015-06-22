@@ -1,20 +1,29 @@
 
 package com.github.mikephil.charting.charts;
 
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
+import android.animation.ValueAnimator.AnimatorUpdateListener;
+import android.annotation.SuppressLint;
 import android.content.Context;
-import android.graphics.Matrix;
 import android.graphics.PointF;
-import android.graphics.Paint.Align;
+import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 
+import com.github.mikephil.charting.animation.Easing;
+import com.github.mikephil.charting.components.Legend.LegendPosition;
+import com.github.mikephil.charting.components.XAxis;
 import com.github.mikephil.charting.data.ChartData;
 import com.github.mikephil.charting.data.DataSet;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.listener.PieRadarChartTouchListener;
+import com.github.mikephil.charting.utils.SelectionDetail;
 import com.github.mikephil.charting.utils.Utils;
-import com.github.mikephil.charting.utils.Legend.LegendPosition;
-import com.nineoldandroids.animation.ObjectAnimator;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Baseclass of PieChart and RadarChart.
@@ -24,14 +33,14 @@ import com.nineoldandroids.animation.ObjectAnimator;
 public abstract class PieRadarChartBase<T extends ChartData<? extends DataSet<? extends Entry>>>
         extends Chart<T> {
 
-    /** holds the current rotation angle of the chart */
-    protected float mRotationAngle = 270f;
+    /** holds the normalized version of the current rotation angle of the chart */
+    private float mRotationAngle = 270f;
+
+    /** holds the raw version of the current rotation angle of the chart */
+    private float mRawRotationAngle = 270f;
 
     /** flag that indicates if rotation is enabled or not */
-    private boolean mRotateEnabled = true;
-
-    /** the pie- and radarchart touchlistener */
-    private OnTouchListener mListener;
+    protected boolean mRotateEnabled = true;
 
     public PieRadarChartBase(Context context) {
         super(context);
@@ -49,174 +58,167 @@ public abstract class PieRadarChartBase<T extends ChartData<? extends DataSet<? 
     protected void init() {
         super.init();
 
-        mListener = new PieRadarChartTouchListener(this);
+        mChartTouchListener = new PieRadarChartTouchListener(this);
+    }
+
+    @Override
+    protected void calcMinMax() {
+        mDeltaX = mData.getXVals().size() - 1;
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         // use the pie- and radarchart listener own listener
-        if (mTouchEnabled && mListener != null)
-            return mListener.onTouch(this, event);
+        if (mTouchEnabled && mChartTouchListener != null)
+            return mChartTouchListener.onTouch(this, event);
         else
             return super.onTouchEvent(event);
     }
 
     @Override
-    public void prepare() {
+    public void computeScroll() {
 
+        if (mChartTouchListener instanceof PieRadarChartTouchListener)
+            ((PieRadarChartTouchListener) mChartTouchListener).computeScroll();
+    }
+
+    @Override
+    public void notifyDataSetChanged() {
         if (mDataNotSet)
             return;
 
-        calcMinMax(false);
+        calcMinMax();
 
-        prepareLegend();
+        if (mLegend != null)
+            mLegendRenderer.computeLegend(mData);
 
         calculateOffsets();
     }
 
     @Override
-    public void notifyDataSetChanged() {
-        prepare();
-    }
-
-    @Override
     protected void calculateOffsets() {
 
-        float legendRight = 0f, legendBottom = 0f, legendTop = 0f;
+        float legendLeft = 0f, legendRight = 0f, legendBottom = 0f, legendTop = 0f;
 
-        if (mDrawLegend && mLegend != null && mLegend.getPosition() != LegendPosition.NONE) {
+        if (mLegend != null && mLegend.isEnabled()) {
+            
+            float fullLegendWidth = Math.min(mLegend.mNeededWidth, 
+                    mViewPortHandler.getChartWidth() * mLegend.getMaxSizePercent()) + 
+                    mLegend.getFormSize() + mLegend.getFormToTextSpace();
 
             if (mLegend.getPosition() == LegendPosition.RIGHT_OF_CHART_CENTER) {
 
                 // this is the space between the legend and the chart
                 float spacing = Utils.convertDpToPixel(13f);
 
-                legendRight = getFullLegendWidth() + spacing;
-
-                mLegendLabelPaint.setTextAlign(Align.LEFT);
-                // legendTop = mLegend.getFullHeight(mLegendLabelPaint);
+                legendRight = fullLegendWidth + spacing;
 
             } else if (mLegend.getPosition() == LegendPosition.RIGHT_OF_CHART) {
 
                 // this is the space between the legend and the chart
-                float spacing = Utils.convertDpToPixel(13f);
+                float spacing = Utils.convertDpToPixel(8f);
 
-                float legendWidth = getFullLegendWidth() + spacing;
+                float legendWidth = fullLegendWidth + spacing;
 
-                float legendHeight = mLegend.getFullHeight(mLegendLabelPaint) + mOffsetTop;
+                float legendHeight = mLegend.mNeededHeight + mLegend.mTextHeightMax;
 
                 PointF c = getCenter();
 
-                PointF bottomRight = new PointF(getWidth() - legendWidth, legendHeight);
-                PointF reference = getPosition(c, getRadius(), 320);
-
+                PointF bottomRight = new PointF(getWidth() - legendWidth + 15, legendHeight + 15);
                 float distLegend = distanceToCenter(bottomRight.x, bottomRight.y);
+
+                PointF reference = getPosition(c, getRadius(),
+                        getAngleForPoint(bottomRight.x, bottomRight.y));
+
                 float distReference = distanceToCenter(reference.x, reference.y);
                 float min = Utils.convertDpToPixel(5f);
 
                 if (distLegend < distReference) {
 
                     float diff = distReference - distLegend;
-
                     legendRight = min + diff;
-                    legendTop = min + diff;
                 }
 
-                if (bottomRight.y >= c.y) {
+                if (bottomRight.y >= c.y && getHeight() - legendWidth > getWidth()) {
                     legendRight = legendWidth;
                 }
 
-                mLegendLabelPaint.setTextAlign(Align.LEFT);
+            } else if (mLegend.getPosition() == LegendPosition.LEFT_OF_CHART_CENTER) {
+
+                // this is the space between the legend and the chart
+                float spacing = Utils.convertDpToPixel(13f);
+
+                legendLeft = fullLegendWidth + spacing;
+
+            } else if (mLegend.getPosition() == LegendPosition.LEFT_OF_CHART) {
+
+                // this is the space between the legend and the chart
+                float spacing = Utils.convertDpToPixel(8f);
+
+                float legendWidth = fullLegendWidth + spacing;
+
+                float legendHeight = mLegend.mNeededHeight + mLegend.mTextHeightMax;
+
+                PointF c = getCenter();
+
+                PointF bottomLeft = new PointF(legendWidth - 15, legendHeight + 15);
+                float distLegend = distanceToCenter(bottomLeft.x, bottomLeft.y);
+
+                PointF reference = getPosition(c, getRadius(),
+                        getAngleForPoint(bottomLeft.x, bottomLeft.y));
+
+                float distReference = distanceToCenter(reference.x, reference.y);
+                float min = Utils.convertDpToPixel(5f);
+
+                if (distLegend < distReference) {
+
+                    float diff = distReference - distLegend;
+                    legendLeft = min + diff;
+                }
+
+                if (bottomLeft.y >= c.y && getHeight() - legendWidth > getWidth()) {
+                    legendLeft = legendWidth;
+                }
 
             } else if (mLegend.getPosition() == LegendPosition.BELOW_CHART_LEFT
                     || mLegend.getPosition() == LegendPosition.BELOW_CHART_RIGHT
                     || mLegend.getPosition() == LegendPosition.BELOW_CHART_CENTER) {
 
-                legendBottom = getRequiredBottomOffset();
+                float yOffset = getRequiredBottomOffset(); // It's possible that we do not need this offset anymore as it is available through the extraOffsets
+                legendBottom = Math.min(mLegend.mNeededHeight + yOffset, mViewPortHandler.getChartHeight() * mLegend.getMaxSizePercent());
+
             }
 
+            legendLeft += getRequiredBaseOffset();
             legendRight += getRequiredBaseOffset();
             legendTop += getRequiredBaseOffset();
-
-            mLegend.setOffsetBottom(mLegendLabelPaint.getTextSize() * 4f);
-            mLegend.setOffsetRight(legendRight);
         }
 
-        float min = Utils.convertDpToPixel(11f);
+        float min = Utils.convertDpToPixel(10f);
 
-        if (mLegend != null) {
-            mLegend.setOffsetLeft(min);
+        if (this instanceof RadarChart) {
+            XAxis x = ((RadarChart) this).getXAxis();
+
+            if (x.isEnabled()) {
+                min = Math.max(Utils.convertDpToPixel(10f), x.mLabelWidth);
+            }
         }
 
-        mOffsetLeft = Math.max(min, getRequiredBaseOffset());
-        mOffsetTop = Math.max(min, legendTop);
-        mOffsetRight = Math.max(min, legendRight);
-        mOffsetBottom = Math.max(min, Math.max(getRequiredBaseOffset(), legendBottom));
+        legendTop += getExtraTopOffset();
+        legendRight += getExtraRightOffset();
+        legendBottom += getExtraBottomOffset();
+        legendLeft += getExtraLeftOffset();
 
-        applyCalculatedOffsets();
-    }
+        float offsetLeft = Math.max(min, legendLeft);
+        float offsetTop = Math.max(min, legendTop);
+        float offsetRight = Math.max(min, legendRight);
+        float offsetBottom = Math.max(min, Math.max(getRequiredBaseOffset(), legendBottom));
 
-    @Override
-    protected void drawAdditional() {
-        // TODO Auto-generated method stub
-    }
+        mViewPortHandler.restrainViewPort(offsetLeft, offsetTop, offsetRight, offsetBottom);
 
-    /**
-     * Applys the newly calculated offsets to the matrices.
-     */
-    protected void applyCalculatedOffsets() {
-
-        prepareContentRect();
-
-        float scaleX = (float) ((getWidth() - mOffsetLeft - mOffsetRight) / mDeltaX);
-        float scaleY = (float) ((getHeight() - mOffsetBottom - mOffsetTop) / mDeltaY);
-
-        Matrix val = new Matrix();
-        val.postTranslate(0, -mYChartMin);
-        val.postScale(scaleX, -scaleY);
-
-        mTrans.getValueMatrix().set(val);
-
-        Matrix offset = new Matrix();
-        offset.postTranslate(mOffsetLeft, getHeight() - mOffsetBottom);
-
-        mTrans.getOffsetMatrix().set(offset);
-    }
-
-    /** the angle where the dragging started */
-    private float mStartAngle = 0f;
-
-    /**
-     * sets the starting angle of the rotation, this is only used by the touch
-     * listener, x and y is the touch position
-     * 
-     * @param x
-     * @param y
-     */
-    public void setStartAngle(float x, float y) {
-
-        mStartAngle = getAngleForPoint(x, y);
-
-        // take the current angle into consideration when starting a new drag
-        mStartAngle -= mRotationAngle;
-    }
-
-    /**
-     * updates the view rotation depending on the given touch position, also
-     * takes the starting angle into consideration
-     * 
-     * @param x
-     * @param y
-     */
-    public void updateRotation(float x, float y) {
-
-        mRotationAngle = getAngleForPoint(x, y);
-
-        // take the offset into consideration
-        mRotationAngle -= mStartAngle;
-
-        // keep the angle >= 0 and <= 360
-        mRotationAngle = (mRotationAngle + 360f) % 360f;
+        if (mLogEnabled)
+            Log.i(LOG_TAG, "offsetLeft: " + offsetLeft + ", offsetTop: " + offsetTop
+                    + ", offsetRight: " + offsetRight + ", offsetBottom: " + offsetBottom);
     }
 
     /**
@@ -270,8 +272,7 @@ public abstract class PieRadarChartBase<T extends ChartData<? extends DataSet<? 
     /**
      * Returns the distance of a certain point on the chart to the center of the
      * chart.
-     * 
-     * @param c the center
+     *
      * @param x
      * @param y
      * @return
@@ -319,14 +320,26 @@ public abstract class PieRadarChartBase<T extends ChartData<? extends DataSet<? 
      * @param angle
      */
     public void setRotationAngle(float angle) {
-
-        angle = (int) Math.abs(angle % 360);
-        mRotationAngle = angle;
+        mRawRotationAngle = angle;
+        mRotationAngle = Utils.getNormalizedAngle(mRawRotationAngle);
     }
 
     /**
-     * gets the current rotation angle of the pie chart
-     * 
+     * gets the raw version of the current rotation angle of the pie chart the
+     * returned value could be any value, negative or positive, outside of the
+     * 360 degrees. this is used when working with rotation direction, mainly by
+     * gestures and animations.
+     *
+     * @return
+     */
+    public float getRawRotationAngle() {
+        return mRawRotationAngle;
+    }
+
+    /**
+     * gets a normalized version of the current rotation angle of the pie chart,
+     * which will always be between 0.0 < 360.0
+     *
      * @return
      */
     public float getRotationAngle() {
@@ -358,10 +371,8 @@ public abstract class PieRadarChartBase<T extends ChartData<? extends DataSet<? 
      * @return
      */
     public float getDiameter() {
-        if (mContentRect == null)
-            return 0;
-        else
-            return Math.min(mContentRect.width(), mContentRect.height());
+        RectF content = mViewPortHandler.getContentRect();
+        return Math.min(content.width(), content.height());
     }
 
     /**
@@ -386,33 +397,49 @@ public abstract class PieRadarChartBase<T extends ChartData<? extends DataSet<? 
      */
     protected abstract float getRequiredBaseOffset();
 
-    /**
-     * Returns the required right offset for the chart.
-     * 
-     * @return
-     */
-    private float getFullLegendWidth() {
-        return mLegend.getMaximumEntryLength(mLegendLabelPaint)
-                + mLegend.getFormSize() + mLegend.getFormToTextSpace();
+    @Override
+    public float getYChartMax() {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public float getYChartMin() {
+        // TODO Auto-generated method stub
+        return 0;
     }
 
     /**
-     * set a new (e.g. custom) charttouchlistener NOTE: make sure to
-     * setTouchEnabled(true); if you need touch gestures on the chart
-     * 
-     * @param l
+     * Returns an array of SelectionDetail objects for the given x-index. The SelectionDetail
+     * objects give information about the value at the selected index and the
+     * DataSet it belongs to. INFORMATION: This method does calculations at
+     * runtime. Do not over-use in performance critical situations.
+     *
+     * @return
      */
-    public void setOnTouchListener(OnTouchListener l) {
-        this.mListener = l;
+    public List<SelectionDetail> getSelectionDetailsAtIndex(int xIndex) {
+
+        List<SelectionDetail> vals = new ArrayList<SelectionDetail>();
+
+        for (int i = 0; i < mData.getDataSetCount(); i++) {
+
+            DataSet<?> dataSet = mData.getDataSetByIndex(i);
+
+            // extract all y-values from all DataSets at the given x-index
+            float yVal = dataSet.getYValForXIndex(xIndex);
+
+            if (!Float.isNaN(yVal)) {
+                vals.add(new SelectionDetail(yVal, i, dataSet));
+            }
+        }
+
+        return vals;
     }
 
     /**
      * ################ ################ ################ ################
      */
     /** CODE BELOW THIS RELATED TO ANIMATION */
-
-    /** objectanimator used for animating values on y-axis */
-    private ObjectAnimator mSpinAnimator;
 
     /**
      * Applys a spin animation to the Chart.
@@ -421,13 +448,26 @@ public abstract class PieRadarChartBase<T extends ChartData<? extends DataSet<? 
      * @param fromangle
      * @param toangle
      */
-    public void spin(int durationmillis, float fromangle, float toangle) {
+    @SuppressLint("NewApi")
+    public void spin(int durationmillis, float fromangle, float toangle, Easing.EasingOption easing) {
 
-        mRotationAngle = fromangle;
+        if (android.os.Build.VERSION.SDK_INT < 11)
+            return;
 
-        mSpinAnimator = ObjectAnimator.ofFloat(this, "rotationAngle", fromangle, toangle);
-        mSpinAnimator.setDuration(durationmillis);
-        mSpinAnimator.addUpdateListener(this);
-        mSpinAnimator.start();
+        setRotationAngle(fromangle);
+
+        ObjectAnimator spinAnimator = ObjectAnimator.ofFloat(this, "rotationAngle", fromangle,
+                toangle);
+        spinAnimator.setDuration(durationmillis);
+        spinAnimator.setInterpolator(Easing.getEasingFunctionFromOption(easing));
+
+        spinAnimator.addUpdateListener(new AnimatorUpdateListener() {
+
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                postInvalidate();
+            }
+        });
+        spinAnimator.start();
     }
 }

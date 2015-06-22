@@ -9,11 +9,13 @@ import android.view.WindowManager;
 import android.widget.Toast;
 
 import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.components.YAxis.AxisDependency;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.data.LineDataSet;
-import com.github.mikephil.charting.interfaces.OnChartValueSelectedListener;
+import com.github.mikephil.charting.listener.OnChartValueSelectedListener;
 import com.github.mikephil.charting.utils.ColorTemplate;
+import com.github.mikephil.charting.utils.Highlight;
 import com.xxmassdeveloper.mpchartexample.notimportant.DemoBase;
 
 import java.util.ArrayList;
@@ -31,11 +33,13 @@ public class DynamicalAddingActivity extends DemoBase implements OnChartValueSel
 
         mChart = (LineChart) findViewById(R.id.chart1);
         mChart.setOnChartValueSelectedListener(this);
-        mChart.setDrawYValues(false);
         mChart.setDrawGridBackground(false);
         mChart.setDescription("");
         
-        addEmptyData();
+        // add an empty data object
+        mChart.setData(new LineData());
+//        mChart.getXAxis().setDrawLabels(false);
+//        mChart.getXAxis().setDrawGridLines(false);
 
         mChart.invalidate();
     }
@@ -49,20 +53,29 @@ public class DynamicalAddingActivity extends DemoBase implements OnChartValueSel
         if(data != null) {
 
             LineDataSet set = data.getDataSetByIndex(0);
-            // set.addEntry(...);
+            // set.addEntry(...); // can be called as well
 
             if (set == null) {
                 set = createSet();
                 data.addDataSet(set);
             }
 
-            data.addEntry(new Entry((float) (Math.random() * 50) + 50f, set.getEntryCount()), 0);
+            // add a new x-value first
+            data.addXValue(set.getEntryCount() + "");
+            
+            // choose a random dataSet
+            int randomDataSetIndex = (int) (Math.random() * data.getDataSetCount());
+            
+            data.addEntry(new Entry((float) (Math.random() * 10) + 50f, set.getEntryCount()), randomDataSetIndex);
 
             // let the chart know it's data has changed
             mChart.notifyDataSetChanged();
-
-            // redraw the chart
-            mChart.invalidate();   
+            
+            mChart.setVisibleXRangeMaximum(6);
+            mChart.setVisibleYRangeMaximum(15, AxisDependency.LEFT);
+//            
+//            // this automatically refreshes the chart (calls invalidate())
+            mChart.moveViewTo(data.getXValCount()-7, 50f, AxisDependency.LEFT);
         }
     }
 
@@ -98,9 +111,17 @@ public class DynamicalAddingActivity extends DemoBase implements OnChartValueSel
 
             // create 10 y-vals
             ArrayList<Entry> yVals = new ArrayList<Entry>();
+            
+            if(data.getXValCount() == 0) {
+                // add 10 x-entries
+                for (int i = 0; i < 10; i++) {
+                    data.addXValue("" + (i+1));
+                }
+            }
 
-            for (int i = 0; i < data.getXValCount(); i++)
+            for (int i = 0; i < data.getXValCount(); i++) {
                 yVals.add(new Entry((float) (Math.random() * 50f) + 50f * count, i));
+            }
 
             LineDataSet set = new LineDataSet(yVals, "DataSet " + count);
             set.setLineWidth(2.5f);
@@ -111,6 +132,8 @@ public class DynamicalAddingActivity extends DemoBase implements OnChartValueSel
             set.setColor(color);
             set.setCircleColor(color);
             set.setHighLightColor(color);
+            set.setValueTextSize(10f);
+            set.setValueTextColor(color);
 
             data.addDataSet(set);
             mChart.notifyDataSetChanged();
@@ -130,24 +153,9 @@ public class DynamicalAddingActivity extends DemoBase implements OnChartValueSel
             mChart.invalidate();   
         }
     }
-    
-    private void addEmptyData() {
-        
-        // create 30 x-vals
-        String[] xVals = new String[30];
-
-        for (int i = 0; i < 30; i++)
-            xVals[i] = "" + i;
-
-        // create a chartdata object that contains only the x-axis labels (no entries or datasets)
-        LineData data = new LineData(xVals);
-
-        mChart.setData(data);
-        mChart.invalidate();
-    }
 
     @Override
-    public void onValueSelected(Entry e, int dataSetIndex) {
+    public void onValueSelected(Entry e, int dataSetIndex, Highlight h) {
         Toast.makeText(this, e.toString(), Toast.LENGTH_SHORT).show();
     }
 
@@ -183,7 +191,8 @@ public class DynamicalAddingActivity extends DemoBase implements OnChartValueSel
                 Toast.makeText(this, "DataSet removed!", Toast.LENGTH_SHORT).show();
                 break;
             case R.id.actionAddEmptyLineData:
-                addEmptyData();
+                mChart.setData(new LineData());
+                mChart.invalidate();
                 Toast.makeText(this, "Empty data added!", Toast.LENGTH_SHORT).show();
                 break;
             case R.id.actionClear:
@@ -203,6 +212,8 @@ public class DynamicalAddingActivity extends DemoBase implements OnChartValueSel
         set.setColor(Color.rgb(240, 99, 99));
         set.setCircleColor(Color.rgb(240, 99, 99));
         set.setHighLightColor(Color.rgb(190, 190, 190));
+        set.setAxisDependency(AxisDependency.LEFT);
+        set.setValueTextSize(10f);
 
         return set;
     }

@@ -12,14 +12,15 @@ import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 
+import com.github.mikephil.charting.animation.Easing;
 import com.github.mikephil.charting.charts.BarChart;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.components.XAxis.XAxisPosition;
+import com.github.mikephil.charting.components.YAxis;
 import com.github.mikephil.charting.data.BarData;
 import com.github.mikephil.charting.data.BarDataSet;
 import com.github.mikephil.charting.data.BarEntry;
 import com.github.mikephil.charting.utils.ColorTemplate;
-import com.github.mikephil.charting.utils.XLabels;
-import com.github.mikephil.charting.utils.XLabels.XLabelPosition;
-import com.github.mikephil.charting.utils.YLabels;
 import com.xxmassdeveloper.mpchartexample.notimportant.DemoBase;
 
 import java.util.ArrayList;
@@ -66,7 +67,7 @@ public class ListViewBarChartActivity extends DemoBase {
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {
 
-            BarData c = getItem(position);
+            BarData data = getItem(position);
 
             ViewHolder holder = null;
 
@@ -85,27 +86,32 @@ public class ListViewBarChartActivity extends DemoBase {
             }
 
             // apply styling
-            holder.chart.setValueTypeface(mTf);
+            data.setValueTypeface(mTf);
+            data.setValueTextColor(Color.BLACK);
             holder.chart.setDescription("");
-            holder.chart.setDrawVerticalGrid(false);
             holder.chart.setDrawGridBackground(false);
-            holder.chart.setValueTextColor(Color.WHITE);
 
-            XLabels xl = holder.chart.getXLabels();
-            xl.setCenterXLabelText(true);
-            xl.setPosition(XLabelPosition.BOTTOM);
-            xl.setTypeface(mTf);
+            XAxis xAxis = holder.chart.getXAxis();
+            xAxis.setPosition(XAxisPosition.BOTTOM);
+            xAxis.setTypeface(mTf);
+            xAxis.setDrawGridLines(false);
             
-            YLabels yl = holder.chart.getYLabels();
-            yl.setTypeface(mTf);
-            yl.setLabelCount(5);
+            YAxis leftAxis = holder.chart.getAxisLeft();
+            leftAxis.setTypeface(mTf);
+            leftAxis.setLabelCount(5);
+            leftAxis.setSpaceTop(15f);
+            
+            YAxis rightAxis = holder.chart.getAxisRight();
+            rightAxis.setTypeface(mTf);
+            rightAxis.setLabelCount(5);
+            rightAxis.setSpaceTop(15f);
 
             // set data
-            holder.chart.setData(c);
+            holder.chart.setData(data);
             
             // do not forget to refresh the chart
 //            holder.chart.invalidate();
-            holder.chart.animateY(700);
+            holder.chart.animateY(700, Easing.EasingOption.EaseInCubic);
 
             return convertView;
         }

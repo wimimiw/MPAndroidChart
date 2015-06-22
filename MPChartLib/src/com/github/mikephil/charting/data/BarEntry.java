@@ -1,6 +1,8 @@
 
 package com.github.mikephil.charting.data;
 
+import android.util.Log;
+
 /**
  * Entry class for the BarChart. (especially stacked bars)
  * 
@@ -14,7 +16,7 @@ public class BarEntry extends Entry {
     /**
      * Constructor for stacked bar entries.
      * 
-     * @param vals
+     * @param vals - the stack values
      * @param xIndex
      */
     public BarEntry(float[] vals, int xIndex) {
@@ -36,7 +38,7 @@ public class BarEntry extends Entry {
     /**
      * Constructor for stacked bar entries.
      * 
-     * @param vals
+     * @param vals - the stack values
      * @param xIndex
      * @param label Additional description label.
      */
@@ -83,11 +85,12 @@ public class BarEntry extends Entry {
      * @param vals
      */
     public void setVals(float[] vals) {
+        setVal(calcSum(vals));
         mVals = vals;
     }
 
     /**
-     * Returns the closest value inside the values array (for stacked barchart)
+     * Returns the index of the closest value inside the values array (for stacked barchart)
      * to the value given as a parameter. The closest value must be higher
      * (above) the provided value.
      * 
@@ -99,20 +102,33 @@ public class BarEntry extends Entry {
         if (mVals == null)
             return 0;
 
-        float dist = 0f;
-        int closestIndex = 0;
+        Log.i("TOUCHVALUE", val + "");
 
-        for (int i = 0; i < mVals.length; i++) {
+        int index = mVals.length - 1;
+        float remainder = 0f;
 
-            float newDist = Math.abs((getVal() - mVals[i]) - val);
-
-            if (newDist < dist && mVals[i] > val) {
-                dist = newDist;
-                closestIndex = i;
-            }
+        while (index > 0 && val > mVals[index] + remainder) {
+            remainder += mVals[index];
+            index--;
         }
 
-        return closestIndex;
+        return index;
+    }
+    
+    public float getBelowSum(int stackIndex) {
+        
+        if (mVals == null)
+            return 0;
+        
+        float remainder = 0f;
+        int index = mVals.length - 1;
+        
+        while(index > stackIndex && index >= 0) {
+            remainder += mVals[index];
+            index--;
+        }
+        
+        return remainder;
     }
 
     /**
@@ -127,6 +143,36 @@ public class BarEntry extends Entry {
 
         for (float f : vals)
             sum += f;
+
+        return sum;
+    }
+
+    public float getPositiveSum() {
+
+        if(mVals == null)
+            return 0f;
+
+        float sum = 0f;
+
+        for (float f : mVals) {
+            if(f >= 0f)
+                sum += f;
+        }
+
+        return sum;
+    }
+
+    public float getNegativeSum() {
+
+        if(mVals == null)
+            return 0f;
+
+        float sum = 0f;
+
+        for (float f : mVals) {
+            if(f <= 0f)
+                sum += Math.abs(f);
+        }
 
         return sum;
     }

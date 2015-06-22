@@ -1,10 +1,15 @@
 package com.github.mikephil.charting.data;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class CandleData extends BarLineScatterCandleData<CandleDataSet> {
 
-    public CandleData(ArrayList<String> xVals) {
+    public CandleData() {
+        super();
+    }
+    
+    public CandleData(List<String> xVals) {
         super(xVals);
     }
     
@@ -12,24 +17,24 @@ public class CandleData extends BarLineScatterCandleData<CandleDataSet> {
         super(xVals);
     }
     
-    public CandleData(ArrayList<String> xVals, ArrayList<CandleDataSet> dataSets) {
+    public CandleData(List<String> xVals, List<CandleDataSet> dataSets) {
         super(xVals, dataSets);
     }
 
-    public CandleData(String[] xVals, ArrayList<CandleDataSet> dataSets) {
+    public CandleData(String[] xVals, List<CandleDataSet> dataSets) {
         super(xVals, dataSets);
     }
     
-    public CandleData(ArrayList<String> xVals, CandleDataSet dataSet) {
-        super(xVals, toArrayList(dataSet));        
+    public CandleData(List<String> xVals, CandleDataSet dataSet) {
+        super(xVals, toList(dataSet));        
     }
     
     public CandleData(String[] xVals, CandleDataSet dataSet) {
-        super(xVals, toArrayList(dataSet));
+        super(xVals, toList(dataSet));
     }
     
-    private static ArrayList<CandleDataSet> toArrayList(CandleDataSet dataSet) {
-        ArrayList<CandleDataSet> sets = new ArrayList<CandleDataSet>();
+    private static List<CandleDataSet> toList(CandleDataSet dataSet) {
+        List<CandleDataSet> sets = new ArrayList<CandleDataSet>();
         sets.add(dataSet);
         return sets;
     }

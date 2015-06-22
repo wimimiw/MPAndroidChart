@@ -12,23 +12,24 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.github.mikephil.charting.charts.BarChart;
+import com.github.mikephil.charting.components.Legend;
+import com.github.mikephil.charting.components.Legend.LegendPosition;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.components.XAxis.XAxisPosition;
+import com.github.mikephil.charting.components.YAxis;
 import com.github.mikephil.charting.data.BarData;
 import com.github.mikephil.charting.data.BarDataSet;
 import com.github.mikephil.charting.data.BarEntry;
+import com.github.mikephil.charting.data.DataSet;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.filter.Approximator;
 import com.github.mikephil.charting.data.filter.Approximator.ApproximatorType;
-import com.github.mikephil.charting.interfaces.OnChartValueSelectedListener;
+import com.github.mikephil.charting.listener.OnChartValueSelectedListener;
 import com.github.mikephil.charting.utils.ColorTemplate;
-import com.github.mikephil.charting.utils.Legend;
-import com.github.mikephil.charting.utils.Legend.LegendPosition;
-import com.github.mikephil.charting.utils.XLabels;
-import com.github.mikephil.charting.utils.XLabels.XLabelPosition;
-import com.github.mikephil.charting.utils.YLabels;
-import com.github.mikephil.charting.utils.YLabels.YLabelPosition;
+import com.github.mikephil.charting.utils.Highlight;
+import com.xxmassdeveloper.mpchartexample.custom.MyValueFormatter;
 import com.xxmassdeveloper.mpchartexample.notimportant.DemoBase;
 
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 
 public class StackedBarActivity extends DemoBase implements OnSeekBarChangeListener,
@@ -57,39 +58,33 @@ public class StackedBarActivity extends DemoBase implements OnSeekBarChangeListe
         mChart = (BarChart) findViewById(R.id.chart1);
         mChart.setOnChartValueSelectedListener(this);
 
-        // enable the drawing of values
-        mChart.setDrawYValues(true);
-
         mChart.setDescription("");
 
         // if more than 60 entries are displayed in the chart, no values will be
         // drawn
         mChart.setMaxVisibleValueCount(60);
-        
-        MyValueFormatter customFormatter = new MyValueFormatter();
-        
-        // set a custom formatter for the values inside the chart
-        mChart.setValueFormatter(customFormatter);
-        
-        // if false values are only drawn for the stack sum, else each value is drawn
-        mChart.setDrawValuesForWholeStack(true);
 
-        // disable 3D
-        mChart.set3DEnabled(false);
+        // if false values are only drawn for the stack sum, else each value is
+        // drawn
+        mChart.setDrawValuesForWholeStack(true);
         // scaling can now only be done on x- and y-axis separately
         mChart.setPinchZoom(false);
 
         mChart.setDrawBarShadow(false);
+        
+        mChart.setDrawValueAboveBar(false);
 
         // change the position of the y-labels
-        YLabels yLabels = mChart.getYLabels();
-        yLabels.setPosition(YLabelPosition.BOTH_SIDED);
-        yLabels.setLabelCount(5);
-        yLabels.setFormatter(customFormatter);
+        YAxis yLabels = mChart.getAxisLeft();
+        // yLabels.setPosition(YLabelPosition.BOTH_SIDED);
+//        yLabels.setLabelCount(5);
+        yLabels.setValueFormatter(new MyValueFormatter());
+        
+        mChart.getAxisRight().setValueFormatter(new MyValueFormatter());
+        mChart.getAxisRight().setDrawGridLines(false);
 
-        XLabels xLabels = mChart.getXLabels();
-        xLabels.setPosition(XLabelPosition.TOP);
-        xLabels.setCenterXLabelText(true);
+        XAxis xLabels = mChart.getXAxis();
+        xLabels.setPosition(XAxisPosition.TOP);
 
         // mChart.setDrawXLabels(false);
         // mChart.setDrawYLabels(false);
@@ -118,18 +113,9 @@ public class StackedBarActivity extends DemoBase implements OnSeekBarChangeListe
 
         switch (item.getItemId()) {
             case R.id.actionToggleValues: {
-                if (mChart.isDrawYValuesEnabled())
-                    mChart.setDrawYValues(false);
-                else
-                    mChart.setDrawYValues(true);
-                mChart.invalidate();
-                break;
-            }
-            case R.id.actionToggle3D: {
-                if (mChart.is3DEnabled())
-                    mChart.set3DEnabled(false);
-                else
-                    mChart.set3DEnabled(true);
+                for (DataSet<?> set : mChart.getData().getDataSets())
+                    set.setDrawValues(!set.isDrawValuesEnabled());
+
                 mChart.invalidate();
                 break;
             }
@@ -150,6 +136,11 @@ public class StackedBarActivity extends DemoBase implements OnSeekBarChangeListe
                 mChart.invalidate();
                 break;
             }
+            case R.id.actionToggleAutoScaleMinMax: {
+                mChart.setAutoScaleMinMaxEnabled(!mChart.isAutoScaleMinMaxEnabled());
+                mChart.notifyDataSetChanged();
+                break;
+            }
             case R.id.actionToggleHighlightArrow: {
                 if (mChart.isDrawHighlightArrowEnabled())
                     mChart.setDrawHighlightArrow(false);
@@ -159,22 +150,8 @@ public class StackedBarActivity extends DemoBase implements OnSeekBarChangeListe
                 break;
             }
             case R.id.actionToggleStartzero: {
-                if (mChart.isStartAtZeroEnabled())
-                    mChart.setStartAtZero(false);
-                else
-                    mChart.setStartAtZero(true);
-
-                mChart.invalidate();
-                break;
-            }
-            case R.id.actionToggleAdjustXLegend: {
-                XLabels xLabels = mChart.getXLabels();
-
-                if (xLabels.isAdjustXLabelsEnabled())
-                    xLabels.setAdjustXLabels(false);
-                else
-                    xLabels.setAdjustXLabels(true);
-
+                mChart.getAxisLeft().setStartAtZero(!mChart.getAxisLeft().isStartAtZeroEnabled());
+                mChart.getAxisRight().setStartAtZero(!mChart.getAxisRight().isStartAtZeroEnabled());
                 mChart.invalidate();
                 break;
             }
@@ -223,25 +200,25 @@ public class StackedBarActivity extends DemoBase implements OnSeekBarChangeListe
         tvY.setText("" + (mSeekBarY.getProgress()));
 
         ArrayList<String> xVals = new ArrayList<String>();
-        for (int i = 0; i < mSeekBarX.getProgress()+1; i++) {
+        for (int i = 0; i < mSeekBarX.getProgress() + 1; i++) {
             xVals.add(mMonths[i % mMonths.length]);
         }
 
         ArrayList<BarEntry> yVals1 = new ArrayList<BarEntry>();
 
-        for (int i = 0; i < mSeekBarX.getProgress()+1; i++) {
+        for (int i = 0; i < mSeekBarX.getProgress() + 1; i++) {
             float mult = (mSeekBarY.getProgress() + 1);
             float val1 = (float) (Math.random() * mult) + mult / 3;
             float val2 = (float) (Math.random() * mult) + mult / 3;
             float val3 = (float) (Math.random() * mult) + mult / 3;
 
             yVals1.add(new BarEntry(new float[] {
-                     val1, val2, val3
+                    val1, val2, val3
             }, i));
         }
 
         BarDataSet set1 = new BarDataSet(yVals1, "Statistics Vienna 2014");
-        set1.setColors(ColorTemplate.VORDIPLOM_COLORS);
+        set1.setColors(getColors());
         set1.setStackLabels(new String[] {
                 "Births", "Divorces", "Marriages"
         });
@@ -250,6 +227,7 @@ public class StackedBarActivity extends DemoBase implements OnSeekBarChangeListe
         dataSets.add(set1);
 
         BarData data = new BarData(xVals, dataSets);
+        data.setValueFormatter(new MyValueFormatter());
 
         mChart.setData(data);
         mChart.invalidate();
@@ -268,15 +246,30 @@ public class StackedBarActivity extends DemoBase implements OnSeekBarChangeListe
     }
 
     @Override
-    public void onValueSelected(Entry e, int dataSetIndex) {
+    public void onValueSelected(Entry e, int dataSetIndex, Highlight h) {
+
+        BarEntry entry = (BarEntry) e;
         Log.i("VAL SELECTED",
-                "Value: " + e.getVal() + ", xIndex: " + e.getXIndex()
-                        + ", DataSet index: " + dataSetIndex);
+                "Value: " + entry.getVals()[h.getStackIndex()]);
     }
 
     @Override
     public void onNothingSelected() {
         // TODO Auto-generated method stub
 
+    }
+    
+    private int[] getColors() {
+        
+        int stacksize = 3;
+        
+        // have as many colors as stack-values per entry
+        int []colors = new int[stacksize];
+        
+        for(int i = 0; i < stacksize; i++) {
+            colors[i] = ColorTemplate.VORDIPLOM_COLORS[i];
+        }      
+        
+        return colors;
     }
 }

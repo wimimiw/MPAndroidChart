@@ -2,6 +2,7 @@
 package com.xxmassdeveloper.mpchartexample;
 
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -12,13 +13,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.github.mikephil.charting.charts.CandleStickChart;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.components.XAxis.XAxisPosition;
+import com.github.mikephil.charting.components.YAxis;
+import com.github.mikephil.charting.components.YAxis.AxisDependency;
 import com.github.mikephil.charting.data.CandleData;
 import com.github.mikephil.charting.data.CandleDataSet;
 import com.github.mikephil.charting.data.CandleEntry;
-import com.github.mikephil.charting.utils.XLabels;
-import com.github.mikephil.charting.utils.XLabels.XLabelPosition;
-import com.github.mikephil.charting.utils.YLabels;
-import com.github.mikephil.charting.utils.YLabels.YLabelPosition;
 import com.xxmassdeveloper.mpchartexample.notimportant.DemoBase;
 
 import java.util.ArrayList;
@@ -56,24 +57,29 @@ public class CandleStickChartActivity extends DemoBase implements OnSeekBarChang
         // scaling can now only be done on x- and y-axis separately
         mChart.setPinchZoom(false);
 
-        mChart.setDrawVerticalGrid(false);
         mChart.setDrawGridBackground(false);
 
-        XLabels xLabels = mChart.getXLabels();
-        xLabels.setPosition(XLabelPosition.BOTTOM);
-        xLabels.setCenterXLabelText(true);
-        xLabels.setSpaceBetweenLabels(2);
+        XAxis xAxis = mChart.getXAxis();
+        xAxis.setPosition(XAxisPosition.BOTTOM);
+        xAxis.setSpaceBetweenLabels(2);
+        xAxis.setDrawGridLines(false);
 
-        YLabels yLabels = mChart.getYLabels();  
-        yLabels.setLabelCount(7);
-        yLabels.setPosition(YLabelPosition.LEFT);
-
-        mChart.setDrawYLabels(true);
-        mChart.setDrawLegend(false);
+        YAxis leftAxis = mChart.getAxisLeft();  
+//        leftAxis.setEnabled(false);
+        leftAxis.setLabelCount(7);
+        leftAxis.setDrawGridLines(false);
+        leftAxis.setDrawAxisLine(false);
+        leftAxis.setStartAtZero(false);
+        
+        YAxis rightAxis = mChart.getAxisRight();
+        rightAxis.setEnabled(false);
+//        rightAxis.setStartAtZero(false);
 
         // setting data
-        mSeekBarX.setProgress(15);
+        mSeekBarX.setProgress(40);
         mSeekBarY.setProgress(100);
+        
+        mChart.getLegend().setEnabled(false);
 
         // Legend l = mChart.getLegend();
         // l.setPosition(LegendPosition.BELOW_CHART_CENTER);
@@ -111,23 +117,14 @@ public class CandleStickChartActivity extends DemoBase implements OnSeekBarChang
                 mChart.invalidate();
                 break;
             }
-            case R.id.actionToggleStartzero: {
-                if (mChart.isStartAtZeroEnabled())
-                    mChart.setStartAtZero(false);
-                else
-                    mChart.setStartAtZero(true);
-
-                mChart.invalidate();
+            case R.id.actionToggleAutoScaleMinMax: {
+                mChart.setAutoScaleMinMaxEnabled(!mChart.isAutoScaleMinMaxEnabled());
+                mChart.notifyDataSetChanged();
                 break;
             }
-            case R.id.actionToggleAdjustXLegend: {
-                XLabels xLabels = mChart.getXLabels();
-
-                if (xLabels.isAdjustXLabelsEnabled())
-                    xLabels.setAdjustXLabels(false);
-                else
-                    xLabels.setAdjustXLabels(true);
-
+            case R.id.actionToggleStartzero: {
+                mChart.getAxisLeft().setStartAtZero(!mChart.getAxisLeft().isStartAtZeroEnabled());
+                mChart.getAxisRight().setStartAtZero(!mChart.getAxisRight().isStartAtZeroEnabled());
                 mChart.invalidate();
                 break;
             }
@@ -160,10 +157,12 @@ public class CandleStickChartActivity extends DemoBase implements OnSeekBarChang
     @Override
     public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
         
-        int prog = (mSeekBarX.getProgress() + 1) * 2;
+        int prog = (mSeekBarX.getProgress() + 1);
 
         tvX.setText("" + prog);
         tvY.setText("" + (mSeekBarY.getProgress()));
+        
+        mChart.resetTracking();
 
         ArrayList<CandleEntry> yVals1 = new ArrayList<CandleEntry>();
 
@@ -189,7 +188,14 @@ public class CandleStickChartActivity extends DemoBase implements OnSeekBarChang
         }
 
         CandleDataSet set1 = new CandleDataSet(yVals1, "Data Set");
-        set1.setColor(Color.rgb(80, 80, 80));
+        set1.setAxisDependency(AxisDependency.LEFT);
+//        set1.setColor(Color.rgb(80, 80, 80));
+        set1.setShadowColor(Color.DKGRAY);
+        set1.setShadowWidth(0.7f);
+        set1.setDecreasingColor(Color.RED);
+        set1.setDecreasingPaintStyle(Paint.Style.STROKE);
+        set1.setIncreasingColor(Color.rgb(122, 242, 84));
+        set1.setIncreasingPaintStyle(Paint.Style.FILL);
 
         CandleData data = new CandleData(xVals, set1);
         
